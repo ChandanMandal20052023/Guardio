@@ -1,0 +1,1 @@
+# Ignore unnecessary files for Docker build\n# Python\n__pycache__/\n*.pyc\n*.pyo\n*.pyd\n# Virtual env\nvenv/\n.env\n# Git\n.git/\n.gitignore\n# Node\nnode_modules/\n# Vite build output\ndist/\n# Django static files (collected)\nstaticfiles/\n# Misc\n*.log\n

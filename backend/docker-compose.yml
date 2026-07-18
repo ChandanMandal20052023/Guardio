@@ -1,0 +1,30 @@
+name: guardio
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: guardio_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guardio_db
+      POSTGRES_USER: guardio
+      POSTGRES_PASSWORD: postgres#128
+    ports:
+      - "5431:5432"
+    volumes:
+      - guardio_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardio -d guardio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: guardio_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+
+volumes:
+  guardio_postgres_data:

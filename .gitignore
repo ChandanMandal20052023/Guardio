@@ -1,0 +1,55 @@
+.cursor/
+node_modules/
+creditcard.csv
+transactions.csv
+users.csv
+
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+10/
+.10/
+env/
+
+media/
+staticfiles/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+dist
+dist-ssr
+*.local
+
+# OS
+.DS_Store
+
+# Visual Studio
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Migrations (optional)
+# */migrations/*
+# !*/migrations/__init__.py
