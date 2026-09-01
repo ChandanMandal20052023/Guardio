@@ -101,37 +101,49 @@ TEMPLATES = [
 WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database Configuration
-# In development: uses local PostgreSQL settings by default.
-# In production: pulls from DATABASE_URL environment variable via dj_database_url.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("POSTGRES_DB", "guardio_db"),
-        "USER": os.getenv("POSTGRES_USER", "guardio"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres#128"),
-        "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
-        "PORT": os.getenv("POSTGRES_PORT", "5431"),
-    }
-}
-
+# In production on Render: pulls from DATABASE_URL environment variable.
+# In local development: uses local PostgreSQL settings (or sqlite fallback if on Render without DATABASE_URL).
 database_url = os.getenv("DATABASE_URL")
+
 if database_url:
     if dj_database_url:
-        DATABASES["default"] = dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
-        )
-    else:
-        # Direct URL parsing fallback if dj_database_url is not installed
-        parsed_db = urllib.parse.urlparse(database_url)
-        DATABASES["default"] = {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": parsed_db.path.lstrip("/"),
-            "USER": parsed_db.username or "",
-            "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
-            "HOST": parsed_db.hostname or "127.0.0.1",
-            "PORT": str(parsed_db.port or 5432),
+        DATABASES = {
+            "default": dj_database_url.config(
+                default=database_url,
+                conn_max_age=600,
+            )
         }
+    else:
+        parsed_db = urllib.parse.urlparse(database_url)
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": parsed_db.path.lstrip("/"),
+                "USER": parsed_db.username or "",
+                "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
+                "HOST": parsed_db.hostname or "127.0.0.1",
+                "PORT": str(parsed_db.port or 5432),
+            }
+        }
+elif os.getenv("RENDER"):
+    # Render cloud build fallback if DATABASE_URL is not yet set
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "guardio_db"),
+            "USER": os.getenv("POSTGRES_USER", "guardio"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres#128"),
+            "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
+            "PORT": os.getenv("POSTGRES_PORT", "5431"),
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
