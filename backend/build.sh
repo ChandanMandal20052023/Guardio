@@ -18,7 +18,11 @@ python ml/training/train.py
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-echo "Applying database migrations..."
-python manage.py migrate
+if [ -n "$DATABASE_URL" ]; then
+    echo "Applying database migrations..."
+    python manage.py migrate --noinput
+else
+    echo "DATABASE_URL not detected. If this is Render, please configure DATABASE_URL in Environment Variables."
+fi
 
 echo "Build completed successfully!"
