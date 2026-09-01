@@ -26,17 +26,20 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # Allowed hosts
-ALLOWED_HOSTS = ["*"] if DEBUG else [
-    "localhost",
-    "127.0.0.1",
-    ".onrender.com",
-]
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".onrender.com"]
+
+# Configure ALLOWED_HOSTS to accept RENDER_EXTERNAL_HOSTNAME in production on Render
+render_external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_external_hostname and render_external_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_external_hostname)
+
+# Additional custom hosts from environment (comma-separated)
 env_allowed_hosts = os.getenv("ALLOWED_HOSTS", "")
 if env_allowed_hosts:
     ALLOWED_HOSTS.extend([h.strip() for h in env_allowed_hosts.split(",") if h.strip()])
-render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
-if render_host and render_host not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(render_host)
+
+if DEBUG:
+    ALLOWED_HOSTS.append("*")
 
 # Application definition
 INSTALLED_APPS = [
@@ -97,42 +100,38 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "backend.wsgi.application"
 
-# Database Configuration (Supports Render DATABASE_URL and local dev individual variables)
-db_user = os.getenv("POSTGRES_USER", "guardio")
-db_password = os.getenv("POSTGRES_PASSWORD", "postgres#128")
-db_host = os.getenv("POSTGRES_HOST", "127.0.0.1")
-db_port = os.getenv("POSTGRES_PORT", "5431")
-db_name = os.getenv("POSTGRES_DB", "guardio_db")
+# Database Configuration
+# In development: uses local PostgreSQL settings by default.
+# In production: pulls from DATABASE_URL environment variable via dj_database_url.
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("POSTGRES_DB", "guardio_db"),
+        "USER": os.getenv("POSTGRES_USER", "guardio"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres#128"),
+        "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
+        "PORT": os.getenv("POSTGRES_PORT", "5431"),
+    }
+}
 
 database_url = os.getenv("DATABASE_URL")
-if dj_database_url and database_url:
-    DATABASES = {
-        "default": dj_database_url.config(
+if database_url:
+    if dj_database_url:
+        DATABASES["default"] = dj_database_url.config(
             default=database_url,
             conn_max_age=600,
         )
-    }
-elif dj_database_url:
-    quoted_user = urllib.parse.quote_plus(db_user)
-    quoted_pass = urllib.parse.quote_plus(db_password)
-    default_url = f"postgresql://{quoted_user}:{quoted_pass}@{db_host}:{db_port}/{db_name}"
-    DATABASES = {
-        "default": dj_database_url.config(
-            default=default_url,
-            conn_max_age=600,
-        )
-    }
-else:
-    DATABASES = {
-        "default": {
+    else:
+        # Direct URL parsing fallback if dj_database_url is not installed
+        parsed_db = urllib.parse.urlparse(database_url)
+        DATABASES["default"] = {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": db_name,
-            "USER": db_user,
-            "PASSWORD": db_password,
-            "HOST": db_host,
-            "PORT": db_port,
+            "NAME": parsed_db.path.lstrip("/"),
+            "USER": parsed_db.username or "",
+            "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
+            "HOST": parsed_db.hostname or "127.0.0.1",
+            "PORT": str(parsed_db.port or 5432),
         }
-    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -189,8 +188,8 @@ CSRF_TRUSTED_ORIGINS = [
     orig if orig.startswith("http") else f"https://{orig}"
     for orig in CORS_ALLOWED_ORIGINS
 ]
-if render_host:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{render_host}")
+if render_external_hostname:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{render_external_hostname}")
 
 # Email & Reset Password URL
 FRONTEND_RESET_PASSWORD_URL = os.getenv(
