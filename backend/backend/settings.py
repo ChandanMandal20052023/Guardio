@@ -101,36 +101,27 @@ TEMPLATES = [
 WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database Configuration
-# In production on Render: pulls from DATABASE_URL environment variable.
-# In local development: uses local PostgreSQL settings (or sqlite fallback if on Render without DATABASE_URL).
+# In production: configured using Render's PostgreSQL via DATABASE_URL environment variable.
+# In development: uses local PostgreSQL environment variables (or defaults).
 database_url = os.getenv("DATABASE_URL")
 
-if database_url:
-    if dj_database_url:
-        DATABASES = {
-            "default": dj_database_url.config(
-                default=database_url,
-                conn_max_age=600,
-            )
-        }
-    else:
-        parsed_db = urllib.parse.urlparse(database_url)
-        DATABASES = {
-            "default": {
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": parsed_db.path.lstrip("/"),
-                "USER": parsed_db.username or "",
-                "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
-                "HOST": parsed_db.hostname or "127.0.0.1",
-                "PORT": str(parsed_db.port or 5432),
-            }
-        }
-elif os.getenv("RENDER"):
-    # Render cloud build fallback if DATABASE_URL is not yet set
+if database_url and dj_database_url:
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+        )
+    }
+elif database_url:
+    parsed_db = urllib.parse.urlparse(database_url)
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": parsed_db.path.lstrip("/"),
+            "USER": parsed_db.username or "",
+            "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
+            "HOST": parsed_db.hostname or "127.0.0.1",
+            "PORT": str(parsed_db.port or 5432),
         }
     }
 else:
