@@ -1,0 +1,120 @@
+{
+    "model_name": "LogisticRegression",
+    "version": "guardio-fraud-v1",
+    "saved_at": "2026-09-01T20:02:45.036508Z",
+    "optimal_threshold": 0.75,
+    "risk_thresholds": {
+        "low_max": 0.3,
+        "medium_max": 0.75,
+        "high_min": 0.75
+    },
+    "features": {
+        "numerical": [
+            "amount_inr",
+            "transaction_hour",
+            "transaction_day_of_week",
+            "is_weekend",
+            "is_night",
+            "is_international",
+            "credit_limit_utilization",
+            "avg_amount_30d",
+            "amount_deviation",
+            "transactions_last_1h",
+            "transactions_last_24h",
+            "unique_merchants_24h",
+            "unique_locations_24h",
+            "location_mismatch"
+        ],
+        "categorical": [
+            "merchant_category",
+            "card_network",
+            "issuing_bank"
+        ],
+        "total_count": 17
+    },
+    "training_dataset": {
+        "name": "guardio_transactions_dataset.csv",
+        "total_samples": 18000,
+        "train_samples": 14400,
+        "test_samples": 3600,
+        "fraud_ratio": 0.08
+    },
+    "metrics": {
+        "accuracy": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "roc_auc": 1.0,
+        "pr_auc": 1.0,
+        "optimal_threshold": 0.75,
+        "confusion_matrix": [
+            [
+                3363,
+                0
+            ],
+            [
+                0,
+                237
+            ]
+        ]
+    },
+    "all_models_evaluated": {
+        "LogisticRegression": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "roc_auc": 1.0,
+            "pr_auc": 1.0,
+            "optimal_threshold": 0.75,
+            "confusion_matrix": [
+                [
+                    3363,
+                    0
+                ],
+                [
+                    0,
+                    237
+                ]
+            ]
+        },
+        "RandomForest": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "roc_auc": 1.0,
+            "pr_auc": 1.0,
+            "optimal_threshold": 0.75,
+            "confusion_matrix": [
+                [
+                    3363,
+                    0
+                ],
+                [
+                    0,
+                    237
+                ]
+            ]
+        },
+        "XGBoost": {
+            "accuracy": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "roc_auc": 1.0,
+            "pr_auc": 1.0,
+            "optimal_threshold": 0.75,
+            "confusion_matrix": [
+                [
+                    3363,
+                    0
+                ],
+                [
+                    0,
+                    237
+                ]
+            ]
+        }
+    }
+}

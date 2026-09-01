@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: guardio-backend
+    env: python
+    rootDir: backend
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: guardio-postgres
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://guardio.vercel.app
+
+databases:
+  - name: guardio-postgres
+    databaseName: guardio_db
+    user: guardio
+    plan: free

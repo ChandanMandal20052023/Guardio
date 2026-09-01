@@ -1,7 +1,7 @@
 import { AppLayout } from "@/components/AppLayout";
 import { TransactionRow } from "@/components/TransactionRow";
 import { useState, useMemo, useEffect } from "react";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, CheckCircle2, AlertTriangle, XCircle, Ban, MapPin, CreditCard, Clock, ShieldAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { Transaction, TransactionStatus } from "@/types/guardio";
 import api from "@/services/api";
-import { CheckCircle2, AlertTriangle, XCircle, Ban, MapPin, CreditCard, Clock } from "lucide-react";
 
 const statusFilters: { label: string; value: TransactionStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -40,8 +39,8 @@ export default function Transactions() {
           amount: parseFloat(t.amount_inr),
           date: t.timestamp,
           status: t.status.toLowerCase(),
-          category: t.category, // Mocked until backend category support
-          cardLast4: t.card_number ? t.card_number : '0000',
+          category: t.category || "General",
+          cardLast4: t.card_number ? t.card_number.slice(-4) : "0000",
           location: t.location,
           reason: t.prediction_reason,
           confidence: t.confidence_score ? parseFloat(t.confidence_score) : undefined
@@ -57,7 +56,7 @@ export default function Transactions() {
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
       const matchesSearch = t.merchant.toLowerCase().includes(search.toLowerCase()) ||
-        t.category.toLowerCase().includes(search.toLowerCase());
+        (t.category && t.category.toLowerCase().includes(search.toLowerCase()));
       const matchesStatus = statusFilter === "all" || t.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -181,9 +180,26 @@ export default function Transactions() {
                   </div>
                 </div>
 
+                {selectedTx.confidence !== undefined && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                        <ShieldAlert className="h-3.5 w-3.5 text-primary" /> Guardio AI Risk Probability
+                      </span>
+                      <span className="text-xs font-bold text-primary">{(selectedTx.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${selectedTx.confidence >= 0.6 ? 'bg-destructive' : selectedTx.confidence >= 0.35 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                        style={{ width: `${Math.min(100, selectedTx.confidence * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {selectedTx.reason && (
                   <div className="bg-fraud/5 border border-fraud/20 rounded-lg p-3">
-                    <p className="text-xs font-medium text-fraud mb-1">⚠️ Detection Reason</p>
+                    <p className="text-xs font-medium text-fraud mb-1">⚠️ Detection Explanation</p>
                     <p className="text-xs text-muted-foreground">{selectedTx.reason}</p>
                   </div>
                 )}

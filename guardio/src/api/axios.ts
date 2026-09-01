@@ -1,30 +1,12 @@
 import axios from "axios";
 
+const rawUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const cleanUrl = rawUrl.endsWith("/") ? rawUrl.slice(0, -1) : rawUrl;
+const baseURL = cleanUrl.endsWith("/api") ? cleanUrl : `${cleanUrl}/api/`;
+
 export default axios.create({
-    baseURL: "http://127.0.0.1:8000/api/",
-    headers: {
-        "Content-Type": "application/json",
-    },
+  baseURL: baseURL.endsWith("/") ? baseURL : `${baseURL}/`,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
-
-const handleSubmit = async () => {
-  try {
-    await axios.put(
-      "/api/profile/",
-      {
-        full_name: FormData.fullName,
-        phone: FormData.phone,
-        location: FormData.location,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("access")}`,
-        },
-      }
-    );
-
-    alert("Profile updated successfully");
-  } catch (error) {
-    console.error(error);
-  }
-};

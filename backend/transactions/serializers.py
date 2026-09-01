@@ -1,5 +1,4 @@
 from rest_framework import serializers
-
 from .models import Transaction, Alert, Notification
 
 
@@ -20,14 +19,18 @@ class TransactionSerializer(serializers.ModelSerializer):
             "confidence_score",
             "prediction_timestamp",
         ]
-        read_only_fields = ["transaction_id", "status", "prediction_reason", "confidence_score", "prediction_timestamp"]
+        read_only_fields = [
+            "transaction_id",
+            "status",
+            "prediction_reason",
+            "confidence_score",
+            "prediction_timestamp",
+        ]
 
 
 class TransactionCreateSerializer(serializers.ModelSerializer):
     """
-    Used when a transaction is ingested (e.g. from a bank feed or manual
-    entry). Deliberately excludes is_fraud — that gets decided afterward,
-    either by the AI model or a manual review action.
+    Used when a transaction is ingested.
     """
 
     class Meta:
@@ -43,30 +46,43 @@ class TransactionCreateSerializer(serializers.ModelSerializer):
         ]
 
 
+class TransactionPredictSerializer(serializers.Serializer):
+    """
+    Validation schema for real-time risk scoring API.
+    """
+    amount_inr = serializers.FloatField(min_value=0.01)
+    merchant = serializers.CharField(max_length=255)
+    location = serializers.CharField(max_length=255, default="Mumbai")
+    timestamp = serializers.DateTimeField(required=False)
+    card_network = serializers.CharField(max_length=50, default="VISA", required=False)
+    issuing_bank = serializers.CharField(max_length=100, default="HDFC Bank", required=False)
+    credit_limit = serializers.FloatField(min_value=1000.0, default=100000.0, required=False)
+
+
 class FraudReviewSerializer(serializers.Serializer):
     """Input for manually confirming/overriding a fraud flag."""
 
-    status = serializers.ChoiceField(choices=['SAFE', 'SUSPICIOUS', 'FRAUD', 'BLOCKED'])
+    status = serializers.ChoiceField(choices=["SAFE", "SUSPICIOUS", "FRAUD", "BLOCKED"])
     reason = serializers.CharField(required=False, allow_blank=True)
 
 
 class ExpenseSummarySerializer(serializers.Serializer):
     """Shape of a single row in expense-summary style analytics endpoints."""
 
-    label = serializers.CharField()  # e.g. merchant name, category, month
+    label = serializers.CharField()
     total_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     transaction_count = serializers.IntegerField()
 
 
 class AlertSerializer(serializers.ModelSerializer):
     transaction = TransactionSerializer(read_only=True)
-    
+
     class Meta:
         model = Alert
-        fields = '__all__'
+        fields = "__all__"
 
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
-        fields = '__all__'
+        fields = "__all__"

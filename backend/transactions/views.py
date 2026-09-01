@@ -1,48 +1,41 @@
-from django.shortcuts import render
-
-# Create your views here.
-from datetime import datetime
-
+from datetime import datetime, timedelta
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncMonth
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Transaction
+from .models import Transaction, TransactionStatus, Alert, Notification
 from .serializers import (
     TransactionSerializer,
     TransactionCreateSerializer,
+    TransactionPredictSerializer,
     FraudReviewSerializer,
     ExpenseSummarySerializer,
     AlertSerializer,
     NotificationSerializer,
 )
-from .tasks import run_fraud_prediction
-from .models import TransactionStatus, Alert, Notification
-
-# Deprecated: use celery task run_fraud_prediction
-def score_transaction_for_fraud(transaction: Transaction) -> dict:
-    pass
+from .tasks import process_fraud_prediction_now
+from ml.inference.predictor import predict_transaction_fraud
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
     """
-    CRUD + fraud-detection + expense-tracking endpoints for Transaction.
+    CRUD + real-time ML fraud detection + expense tracking endpoints for Guardio.
 
-    list:    GET  /transactions/
-             supports ?user=<user_id>&merchant=<name>&is_fraud=true
-                       &date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
-    create:  POST /transactions/
-    detail:  GET  /transactions/{transaction_id}/
+    list:    GET  /api/transactions/
+    create:  POST /api/transactions/ (automatically scores fraud risk via ML pipeline)
+    detail:  GET  /api/transactions/{transaction_id}/
 
-    extra actions:
-    POST /transactions/{id}/score/          -> run AI fraud scoring on this txn
-    POST /transactions/{id}/review/         -> manually confirm/override fraud flag
-    GET  /transactions/flagged/             -> list all is_fraud=True transactions
-    GET  /transactions/summary/by-merchant/ -> spend grouped by merchant
-    GET  /transactions/summary/by-month/    -> spend grouped by month
-    GET  /transactions/summary/overview/    -> totals: spend, count, fraud count
+    custom actions:
+    POST /api/transactions/{id}/score/          -> score/re-score transaction through Guardio ML model
+    POST /api/transactions/predict/             -> standalone real-time risk assessment on payload
+    POST /api/transactions/{id}/review/         -> manual confirmation/override (e.g. BLOCKED)
+    GET  /api/transactions/flagged/             -> list all FRAUD / SUSPICIOUS transactions
+    GET  /api/transactions/summary/by-merchant/ -> merchant expense breakdown
+    GET  /api/transactions/summary/by-month/    -> monthly expense trend
+    GET  /api/transactions/summary/overview/    -> overview metrics & fraud counts
     """
 
     queryset = Transaction.objects.select_related("user", "card")
@@ -76,24 +69,75 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         transaction = serializer.save()
-        transaction.status = TransactionStatus.PENDING_REVIEW
-        transaction.save(update_fields=["status"])
-        
-        # Trigger Celery task
-        run_fraud_prediction.delay(transaction.transaction_id)
+        # Run Guardio ML fraud prediction synchronously on creation
+        process_fraud_prediction_now(transaction.transaction_id)
 
-    # ---- fraud actions -------------------------------------------------
+    # ---- Real-time ML Prediction & Scoring Endpoints ------------------
 
     @action(detail=True, methods=["post"])
     def score(self, request, transaction_id=None):
-        """Run (or re-run) AI fraud scoring on a single transaction."""
+        """Run or re-run Guardio AI fraud scoring on a single transaction."""
         txn = self.get_object()
-        run_fraud_prediction.delay(txn.transaction_id)
-        return Response({"detail": "Prediction task queued."}, status=status.HTTP_200_OK)
+        result = process_fraud_prediction_now(txn.transaction_id)
+        txn.refresh_from_db()
+        return Response(
+            {
+                "transaction_id": txn.transaction_id,
+                "status": txn.status,
+                "confidence_score": txn.confidence_score,
+                "prediction_reason": txn.prediction_reason,
+                "prediction_timestamp": txn.prediction_timestamp,
+                "risk_details": result,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=["post"], url_path="predict")
+    def predict(self, request):
+        """
+        Standalone real-time fraud risk assessment without persisting to DB.
+        Accepts transaction details, extracts historical context from current user,
+        and returns fraud probability, risk score (0-100), and risk level.
+        """
+        serializer = TransactionPredictSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = request.user
+        ts = data.get("timestamp") or timezone.now()
+
+        # Fetch recent historical records for current authenticated user
+        t_30d = ts - timedelta(days=30)
+        history_records = list(
+            Transaction.objects.filter(
+                user=user,
+                timestamp__gte=t_30d,
+                timestamp__lt=ts
+            ).values("amount_inr", "timestamp", "merchant", "location")
+        )
+
+        user_city = getattr(user, "city", "")
+        card_network = data.get("card_network", "VISA")
+        issuing_bank = data.get("issuing_bank", "HDFC Bank")
+        credit_limit = data.get("credit_limit", 100000.0)
+
+        result = predict_transaction_fraud(
+            amount_inr=data["amount_inr"],
+            timestamp=ts,
+            merchant=data["merchant"],
+            location=data["location"],
+            card_network=card_network,
+            issuing_bank=issuing_bank,
+            credit_limit=credit_limit,
+            user_city=user_city,
+            history_records=history_records,
+        )
+
+        return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"])
     def review(self, request, transaction_id=None):
-        """Manual override by a human reviewer (e.g. BLOCKED)."""
+        """Manual override by reviewer (e.g. BLOCKED, SAFE)."""
         txn = self.get_object()
         serializer = FraudReviewSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -101,13 +145,12 @@ class TransactionViewSet(viewsets.ModelViewSet):
         new_status = serializer.validated_data["status"]
         txn.status = new_status
         txn.save(update_fields=["status"])
-        
+
         if new_status == TransactionStatus.BLOCKED:
-            from .tasks import generate_notification
-            generate_notification.delay(
-                user_id=txn.user.user_id,
+            Notification.objects.create(
+                user=txn.user,
                 title="Transaction Blocked",
-                message=f"Transaction {txn.transaction_id} was manually blocked."
+                message=f"Transaction {txn.transaction_id} was manually blocked.",
             )
 
         return Response(
@@ -128,7 +171,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         return Response(serializer.data)
 
-    # ---- expense analytics ----------------------------------------------
+    # ---- Expense Analytics Endpoints -----------------------------------
 
     @action(detail=False, methods=["get"], url_path="summary/by-merchant")
     def summary_by_merchant(self, request):
@@ -187,6 +230,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             }
         )
 
+
 class AlertViewSet(viewsets.ModelViewSet):
     serializer_class = AlertSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -197,6 +241,7 @@ class AlertViewSet(viewsets.ModelViewSet):
             return Alert.objects.all()
         return Alert.objects.filter(user=user)
 
+
 class NotificationViewSet(viewsets.ModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -205,4 +250,4 @@ class NotificationViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return Notification.objects.all()
-        return Notification.objects.filter(user=user)
+        return Notification.objects.filter(user=user)

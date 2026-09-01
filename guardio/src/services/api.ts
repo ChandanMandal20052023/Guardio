@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth';
-// Import your fresh interfaces from the new types location
 import { 
   Transaction, 
   Alert, 
@@ -9,7 +8,9 @@ import {
   MonthlyTrend 
 } from '../types/guardio';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const rawUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const cleanUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
+const API_BASE_URL = cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -54,7 +55,6 @@ api.interceptors.response.use(
         });
 
         const newAccessToken = response.data.access;
-        // SimpleJWT refresh endpoint usually only returns new access token by default unless rotated
         const newRefreshToken = response.data.refresh || refreshToken; 
 
         setTokens(newAccessToken, newRefreshToken);
@@ -75,35 +75,99 @@ api.interceptors.response.use(
 );
 
 // ---------------------------------------------------------------------------
-// Phase 12 - Guardio Core Data Endpoints (Communicating with PostgreSQL)
+// Guardio Core Endpoints
 // ---------------------------------------------------------------------------
 export const guardioApi = {
   // Fetch users' transactions
   getTransactions: async (): Promise<Transaction[]> => {
-    const response = await api.get<Transaction[]>('/transactions/');
+    const response = await api.get('/transactions/');
+    const data = response.data?.results || response.data || [];
+    return data.map((t: any) => ({
+      id: t.transaction_id,
+      merchant: t.merchant,
+      amount: parseFloat(t.amount_inr),
+      date: t.timestamp,
+      status: (t.status || 'SAFE').toLowerCase(),
+      category: 'Shopping',
+      cardLast4: t.card_number ? t.card_number.slice(-4) : '0000',
+      location: t.location,
+      reason: t.prediction_reason,
+      confidence: t.confidence_score ? parseFloat(t.confidence_score) : undefined,
+    }));
+  },
+
+  // Create and immediately score transaction
+  createTransaction: async (data: {
+    amount_inr: number;
+    merchant: string;
+    location: string;
+    card_number: string;
+    timestamp: string;
+    card?: number;
+    user?: string;
+  }) => {
+    const response = await api.post('/transactions/', data);
+    return response.data;
+  },
+
+  // Standalone real-time risk scoring endpoint
+  predictRisk: async (data: {
+    amount_inr: number;
+    merchant: string;
+    location: string;
+    card_network?: string;
+    issuing_bank?: string;
+    credit_limit?: number;
+    timestamp?: string;
+  }) => {
+    const response = await api.post('/transactions/predict/', data);
     return response.data;
   },
 
   // Fetch security alerts 
   getAlerts: async (): Promise<Alert[]> => {
-    const response = await api.get<Alert[]>('/alerts/');
+    const response = await api.get('/transactions/alerts/');
+    const data = response.data?.results || response.data || [];
+    return data.map((a: any) => ({
+      id: String(a.alert_id),
+      type: (a.prediction || 'FRAUD').toLowerCase(),
+      title: `${a.prediction || 'Fraud'} Alert (${a.severity})`,
+      description: a.reason || 'Unusual activity detected by Guardio AI',
+      timestamp: a.timestamp,
+      resolved: a.status === 'RESOLVED',
+      transactionId: a.transaction?.transaction_id || String(a.transaction),
+    }));
+  },
+
+  // Fetch overview metrics
+  getOverview: async () => {
+    const response = await api.get('/transactions/summary/overview/');
     return response.data;
   },
 
-  // Fetch dashboard metrics and analytic charts data matrices
+  // Fetch analytic charts data matrices
   getWeeklySpending: async (): Promise<WeeklySpending[]> => {
-    const response = await api.get<WeeklySpending[]>('/analytics/weekly/');
-    return response.data;
+    const response = await api.get('/transactions/summary/by-month/');
+    return (response.data || []).map((item: any) => ({
+      day: item.label,
+      amount: parseFloat(item.total_amount || 0)
+    }));
   },
 
   getSpendingByCategory: async (): Promise<SpendingByCategory[]> => {
-    const response = await api.get<SpendingByCategory[]>('/analytics/category/');
-    return response.data;
+    const response = await api.get('/transactions/summary/by-merchant/');
+    return (response.data || []).map((item: any) => ({
+      category: item.label,
+      amount: parseFloat(item.total_amount || 0)
+    }));
   },
 
   getMonthlyTrend: async (): Promise<MonthlyTrend[]> => {
-    const response = await api.get<MonthlyTrend[]>('/analytics/trend/');
-    return response.data;
+    const response = await api.get('/transactions/summary/by-month/');
+    return (response.data || []).map((item: any) => ({
+      month: item.label,
+      amount: parseFloat(item.total_amount || 0)
+    }));
   },
 };
 
