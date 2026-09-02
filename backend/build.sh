@@ -18,11 +18,8 @@ python ml/training/train.py
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-if [ -n "$DATABASE_URL" ]; then
-    echo "Applying database migrations..."
-    python manage.py migrate --noinput
-else
-    echo "DATABASE_URL not detected. If this is Render, please configure DATABASE_URL in Environment Variables."
-fi
+# NOTE: Migrations are NOT run during the build step.
+# Render's managed Postgres is not reliably reachable during builds.
+# Migrations run in the Pre-Deploy Command (or Start Command) instead.
 
 echo "Build completed successfully!"

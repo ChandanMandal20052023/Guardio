@@ -6,6 +6,7 @@ import os
 import urllib.parse
 from pathlib import Path
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 try:
     import dj_database_url
@@ -40,6 +41,15 @@ if env_allowed_hosts:
 
 if DEBUG:
     ALLOWED_HOSTS.append("*")
+else:
+    # Production security headers (Render terminates SSL at proxy)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # Application definition
 INSTALLED_APPS = [
@@ -101,40 +111,48 @@ TEMPLATES = [
 WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database Configuration
-# In production: configured using Render's PostgreSQL via DATABASE_URL environment variable.
-# In development: uses local PostgreSQL environment variables (or defaults).
-database_url = os.getenv("DATABASE_URL")
+# Production (Render): reads DATABASE_URL environment variable
+# Local dev: reads DATABASE_URL from .env, or falls back to docker-compose defaults
+_DATABASE_URL = os.getenv("DATABASE_URL")
 
-if database_url and dj_database_url:
-    DATABASES = {
-        "default": dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
+if _DATABASE_URL:
+    # Production / any environment with DATABASE_URL set
+    if dj_database_url:
+        DATABASES = {
+            "default": dj_database_url.config(
+                default=_DATABASE_URL,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+    else:
+        raise ImproperlyConfigured(
+            "DATABASE_URL is set but dj-database-url is not installed. "
+            "Run: pip install dj-database-url"
         )
-    }
-elif database_url:
-    parsed_db = urllib.parse.urlparse(database_url)
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": parsed_db.path.lstrip("/"),
-            "USER": parsed_db.username or "",
-            "PASSWORD": urllib.parse.unquote(parsed_db.password or ""),
-            "HOST": parsed_db.hostname or "127.0.0.1",
-            "PORT": str(parsed_db.port or 5432),
-        }
-    }
 else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("POSTGRES_DB", "guardio_db"),
-            "USER": os.getenv("POSTGRES_USER", "guardio"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres#128"),
-            "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
-            "PORT": os.getenv("POSTGRES_PORT", "5431"),
+    if DEBUG:
+        # Local development fallback (docker-compose defaults)
+        db_user = urllib.parse.quote_plus(os.getenv("POSTGRES_USER", "guardio"))
+        db_password = urllib.parse.quote_plus(os.getenv("POSTGRES_PASSWORD", "postgres#128"))
+        db_host = os.getenv("POSTGRES_HOST", "127.0.0.1")
+        db_port = os.getenv("POSTGRES_PORT", "5431")
+        db_name = os.getenv("POSTGRES_DB", "guardio_db")
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": db_name,
+                "USER": os.getenv("POSTGRES_USER", "guardio"),
+                "PASSWORD": os.getenv("POSTGRES_PASSWORD", "postgres#128"),
+                "HOST": db_host,
+                "PORT": db_port,
+            }
         }
-    }
+    else:
+        raise ImproperlyConfigured(
+            "DATABASE_URL environment variable is required in production. "
+            "Set it in your Render dashboard under Environment Variables."
+        )
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
