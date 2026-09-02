@@ -10,6 +10,13 @@ echo "Ensuring Guardio ML model is compiled and ready..."
 python ml/training/train.py
 
 echo "Collecting static files..."
+# Django requires DATABASES to be configured even for collectstatic.
+# During Render's build phase, DATABASE_URL is not available, so we
+# provide a dummy SQLite URL. collectstatic doesn't query the database.
+if [ -z "$DATABASE_URL" ]; then
+    export DATABASE_URL="sqlite:///tmp/build_db.sqlite3"
+    echo "No DATABASE_URL found (expected during build). Using dummy SQLite for collectstatic."
+fi
 python manage.py collectstatic --noinput
 
 # NOTE: Migrations are NOT run during the build step.
