@@ -101,8 +101,8 @@ export default function Login() {
 
       <div className="w-full max-w-md relative z-10 animate-slide-in">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-primary shadow-elevated mb-4">
-            <Shield className="h-8 w-8 text-primary-foreground" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden shadow-elevated mb-4">
+            <img src="/logo.jpeg" alt="Guardio logo" className="w-full h-full object-cover scale-105" />
           </div>
           <h1 className="font-display text-3xl font-bold text-foreground">Guardio</h1>
           <p className="text-muted-foreground text-sm mt-1">Guardio Fraud Detector</p>

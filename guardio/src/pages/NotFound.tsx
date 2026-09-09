@@ -9,11 +9,14 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted">
+    <div className="flex min-h-screen items-center justify-center bg-muted p-4">
       <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">404</h1>
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden shadow-elevated mb-4">
+          <img src="/logo.jpeg" alt="Guardio logo" className="w-full h-full object-cover scale-105" />
+        </div>
+        <h1 className="mb-2 text-4xl font-bold">404</h1>
         <p className="mb-4 text-xl text-muted-foreground">Oops! Page not found</p>
-        <a href="/" className="text-primary underline hover:text-primary/90">
+        <a href="/" className="text-primary underline hover:text-primary/90 font-medium">
           Return to Home
         </a>
       </div>

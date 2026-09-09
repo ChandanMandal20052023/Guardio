@@ -5,7 +5,6 @@ import {
   Bell,
   BarChart3,
   Shield,
-  CreditCard,
   LogOut,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -53,8 +52,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-2">
         <div className="flex items-center gap-3">
-          <div className="gradient-primary rounded-lg p-2 flex-shrink-0">
-            <CreditCard className="h-5 w-5 text-primary-foreground" />
+          <div className="h-9 w-9 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+            <img src="/logo.jpeg" alt="Guardio logo" className="w-full h-full object-cover scale-105" />
           </div>
           {!collapsed && (
             <div>
